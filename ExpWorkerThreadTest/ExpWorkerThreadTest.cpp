@@ -1,8 +1,5 @@
 #include <ntddk.h>
 
-// KIRQL currentIrql = KeGetCurrentIrql();
-// KdPrint(("Current IRQL: %d\n", KeGetCurrentIrql()));
-
 UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\ExpWorkerThreadTest");
 UNICODE_STRING SymbolicLink = RTL_CONSTANT_STRING(L"\\??\\ExpWorkerThreadTest");
 
@@ -16,7 +13,7 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
 	
 	DriverObject->DriverUnload = DriverUnload;
 	DriverObject->MajorFunction[IRP_MJ_CREATE] = Create;
-	DriverObject->MajorFunction[IRP_MJ_CLOSE] = Create;
+	DriverObject->MajorFunction[IRP_MJ_CLOSE] = Close;
 
 	PDEVICE_OBJECT DeviceObject;
 	NTSTATUS status = IoCreateDevice(
@@ -42,11 +39,35 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
 		return status;
 	}
 
+	KdPrint(("DriverEntry OK"));
 	return STATUS_SUCCESS;
 }
 
-NTSTATUS Create(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+IO_WORKITEM_ROUTINE IoWorkItemRoutine;
+void IoWorkItemRoutine(PDEVICE_OBJECT DeviceObject, PVOID Context) {
 	UNREFERENCED_PARAMETER(DeviceObject);
+	UNREFERENCED_PARAMETER(Context);
+	KdPrint(("Current IRQL: %d, Current PID: %lu", KeGetCurrentIrql(), PsGetCurrentProcessId()));
+}
+
+NTSTATUS Create(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+	do {
+		PIO_WORKITEM WorkItem = IoAllocateWorkItem(DeviceObject);
+		if (NULL == WorkItem) {
+			KdPrint(("Failed to allocate a work item!"));
+			break;
+		}
+
+		IoQueueWorkItem(
+			WorkItem,
+			IoWorkItemRoutine,
+			DelayedWorkQueue,
+			NULL
+		);
+
+		IoFreeWorkItem(WorkItem);
+	} while (false);
+
 	Irp->IoStatus.Status = STATUS_SUCCESS;
 	Irp->IoStatus.Information = 0;
 	IoCompleteRequest(Irp, IO_NO_INCREMENT);
