@@ -8,6 +8,7 @@ UNICODE_STRING SymbolicLink = RTL_CONSTANT_STRING(L"\\??\\ExpWorkerThreadTest");
 
 NTSTATUS CreateClose(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 void DriverUnload(PDRIVER_OBJECT DriverObject);
+NTSTATUS WorkIoctl(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 
 extern "C" NTSTATUS
 DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
@@ -16,6 +17,7 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
 	DriverObject->DriverUnload = DriverUnload;
 	DriverObject->MajorFunction[IRP_MJ_CREATE] = CreateClose;
 	DriverObject->MajorFunction[IRP_MJ_CLOSE] = CreateClose;
+	DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = WorkIoctl;
 
 	PDEVICE_OBJECT DeviceObject;
 	NTSTATUS status = IoCreateDevice(
@@ -69,6 +71,21 @@ void CreateTestWorkItem(PDEVICE_OBJECT DeviceObject) {
 
 		IoFreeWorkItem(WorkItem);
 	} while (false);
+}
+
+NTSTATUS WorkIoctl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+	PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(Irp);
+
+	switch (stack->Parameters.DeviceIoControl.IoControlCode) {
+		case IOCTL_WORKITEM_TEST:
+			CreateTestWorkItem(DeviceObject);
+			break;
+	}
+
+	Irp->IoStatus.Status = STATUS_SUCCESS;
+	Irp->IoStatus.Information = 0;
+	IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	return STATUS_SUCCESS;
 }
 
 NTSTATUS CreateClose(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
