@@ -1,10 +1,12 @@
 #include <ntddk.h>
 
+#define MY_DEVICE_TYPE 0x8123
+#define IOCTL_WORKITEM_TEST CTL_CODE(MY_DEVICE_TYPE, 0x800, METHOD_NEITHER, FILE_ANY_ACCESS)
+
 UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\ExpWorkerThreadTest");
 UNICODE_STRING SymbolicLink = RTL_CONSTANT_STRING(L"\\??\\ExpWorkerThreadTest");
 
-NTSTATUS Create(PDEVICE_OBJECT DeviceObject, PIRP Irp);
-NTSTATUS Close(PDEVICE_OBJECT DeviceObject, PIRP Irp);
+NTSTATUS CreateClose(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 void DriverUnload(PDRIVER_OBJECT DriverObject);
 
 extern "C" NTSTATUS
@@ -12,8 +14,8 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
 	UNREFERENCED_PARAMETER(RegistryPath);
 	
 	DriverObject->DriverUnload = DriverUnload;
-	DriverObject->MajorFunction[IRP_MJ_CREATE] = Create;
-	DriverObject->MajorFunction[IRP_MJ_CLOSE] = Close;
+	DriverObject->MajorFunction[IRP_MJ_CREATE] = CreateClose;
+	DriverObject->MajorFunction[IRP_MJ_CLOSE] = CreateClose;
 
 	PDEVICE_OBJECT DeviceObject;
 	NTSTATUS status = IoCreateDevice(
@@ -50,7 +52,7 @@ void IoWorkItemRoutine(PDEVICE_OBJECT DeviceObject, PVOID Context) {
 	KdPrint(("Current IRQL: %d, Current PID: %lu", KeGetCurrentIrql(), PsGetCurrentProcessId()));
 }
 
-NTSTATUS Create(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+void CreateTestWorkItem(PDEVICE_OBJECT DeviceObject) {
 	do {
 		PIO_WORKITEM WorkItem = IoAllocateWorkItem(DeviceObject);
 		if (NULL == WorkItem) {
@@ -67,21 +69,15 @@ NTSTATUS Create(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
 
 		IoFreeWorkItem(WorkItem);
 	} while (false);
-
-	Irp->IoStatus.Status = STATUS_SUCCESS;
-	Irp->IoStatus.Information = 0;
-	IoCompleteRequest(Irp, IO_NO_INCREMENT);
-	return NTSTATUS();
 }
 
-NTSTATUS Close(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+NTSTATUS CreateClose(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
 	UNREFERENCED_PARAMETER(DeviceObject);
 	Irp->IoStatus.Status = STATUS_SUCCESS;
 	Irp->IoStatus.Information = 0;
 	IoCompleteRequest(Irp, IO_NO_INCREMENT);
 	return NTSTATUS();
 }
-
 
 void DriverUnload(PDRIVER_OBJECT DriverObject) {
 	IoDeleteSymbolicLink(&SymbolicLink);
